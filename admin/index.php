@@ -1,36 +1,6 @@
-<!-- index.php placeholder -->
- <?php
+<?php
 require_once '../includes/config.php';
 require_once '../includes/auth.php';
-
-// Ensure timeAgo function is available
-if (!function_exists('timeAgo')) {
-    function timeAgo($datetime) {
-        $time = strtotime($datetime);
-        $now = time();
-        $diff = $now - $time;
-        
-        if ($diff < 60) {
-            return $diff . ' seconds ago';
-        } elseif ($diff < 3600) {
-            $mins = floor($diff / 60);
-            return $mins . ' minute' . ($mins > 1 ? 's' : '') . ' ago';
-        } elseif ($diff < 86400) {
-            $hours = floor($diff / 3600);
-            return $hours . ' hour' . ($hours > 1 ? 's' : '') . ' ago';
-        } elseif ($diff < 2592000) {
-            $days = floor($diff / 86400);
-            return $days . ' day' . ($days > 1 ? 's' : '') . ' ago';
-        } else {
-            $months = floor($diff / 2592000);
-            return $months . ' month' . ($months > 1 ? 's' : '') . ' ago';
-        }
-    }
-}
-
-// Require admin access
-requireAdmin();
-
 
 // Require admin access
 requireAdmin();
@@ -38,7 +8,17 @@ requireAdmin();
 $page_title = 'Admin Dashboard';
 include '../includes/header.php';
 
-// Get statistics
+// Function to safely execute queries and handle errors
+function safeQuery($conn, $sql, $default = null) {
+    $result = mysqli_query($conn, $sql);
+    if (!$result) {
+        error_log("SQL Error: " . mysqli_error($conn) . " in query: " . $sql);
+        return $default;
+    }
+    return $result;
+}
+
+// Get statistics with error handling
 $stats = [];
 
 // Total users
@@ -48,16 +28,16 @@ $users_sql = "SELECT
                 SUM(CASE WHEN user_type = 'client' THEN 1 ELSE 0 END) as clients,
                 SUM(CASE WHEN DATE(registration_date) = CURDATE() THEN 1 ELSE 0 END) as new_users_today
               FROM users";
-$users_result = mysqli_query($conn, $users_sql);
-$stats['users'] = mysqli_fetch_assoc($users_result);
+$users_result = safeQuery($conn, $users_sql);
+$stats['users'] = $users_result ? mysqli_fetch_assoc($users_result) : ['total_users' => 0, 'admins' => 0, 'clients' => 0, 'new_users_today' => 0];
 
 // Total services
 $services_sql = "SELECT 
                    COUNT(*) as total_services,
                    SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_services
                  FROM services";
-$services_result = mysqli_query($conn, $services_sql);
-$stats['services'] = mysqli_fetch_assoc($services_result);
+$services_result = safeQuery($conn, $services_sql);
+$stats['services'] = $services_result ? mysqli_fetch_assoc($services_result) : ['total_services' => 0, 'active_services' => 0];
 
 // Service requests
 $requests_sql = "SELECT 
@@ -68,8 +48,8 @@ $requests_sql = "SELECT
                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
                    SUM(CASE WHEN DATE(request_date) = CURDATE() THEN 1 ELSE 0 END) as today
                  FROM service_requests";
-$requests_result = mysqli_query($conn, $requests_sql);
-$stats['requests'] = mysqli_fetch_assoc($requests_result);
+$requests_result = safeQuery($conn, $requests_sql);
+$stats['requests'] = $requests_result ? mysqli_fetch_assoc($requests_result) : ['total_requests' => 0, 'pending' => 0, 'in_progress' => 0, 'completed' => 0, 'cancelled' => 0, 'today' => 0];
 
 // Passport assistance
 $passport_sql = "SELECT 
@@ -79,30 +59,36 @@ $passport_sql = "SELECT
                    SUM(CASE WHEN status = 'appointment_scheduled' THEN 1 ELSE 0 END) as scheduled,
                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
                  FROM passport_assistance";
-$passport_result = mysqli_query($conn, $passport_sql);
-$stats['passport'] = mysqli_fetch_assoc($passport_result);
+$passport_result = safeQuery($conn, $passport_sql);
+$stats['passport'] = $passport_result ? mysqli_fetch_assoc($passport_result) : ['total' => 0, 'initiated' => 0, 'verified' => 0, 'scheduled' => 0, 'completed' => 0];
 
 // Revenue statistics
 $revenue_sql = "SELECT 
                   COALESCE(SUM(budget), 0) as total_revenue,
                   COALESCE(SUM(CASE WHEN MONTH(request_date) = MONTH(CURDATE()) THEN budget ELSE 0 END), 0) as monthly_revenue,
-                  COALESCE(SUM(CASE DATE(request_date) = CURDATE() THEN budget ELSE 0 END), 0) as today_revenue
+                  COALESCE(SUM(CASE WHEN DATE(request_date) = CURDATE() THEN budget ELSE 0 END), 0) as today_revenue
                 FROM service_requests 
                 WHERE status = 'completed'";
-$revenue_result = mysqli_query($conn, $revenue_sql);
-$stats['revenue'] = mysqli_fetch_assoc($revenue_result);
+$revenue_result = safeQuery($conn, $revenue_sql);
+$stats['revenue'] = $revenue_result ? mysqli_fetch_assoc($revenue_result) : ['total_revenue' => 0, 'monthly_revenue' => 0, 'today_revenue' => 0];
 
-// Recent activities
-$activities_sql = "SELECT 
-                     ul.*,
-                     u.full_name,
-                     u.email
-                   FROM user_activity_log ul
-                   JOIN users u ON ul.user_id = u.user_id
-                   ORDER BY ul.created_at DESC
-                   LIMIT 10";
-$activities_result = mysqli_query($conn, $activities_sql);
-$recent_activities = mysqli_fetch_all($activities_result, MYSQLI_ASSOC);
+// Recent activities - with error handling for missing table
+$recent_activities = [];
+$table_exists = mysqli_query($conn, "SHOW TABLES LIKE 'user_activity_log'");
+if (mysqli_num_rows($table_exists) > 0) {
+    $activities_sql = "SELECT 
+                         ul.*,
+                         u.full_name,
+                         u.email
+                       FROM user_activity_log ul
+                       JOIN users u ON ul.user_id = u.user_id
+                       ORDER BY ul.created_at DESC
+                       LIMIT 10";
+    $activities_result = safeQuery($conn, $activities_sql);
+    if ($activities_result) {
+        $recent_activities = mysqli_fetch_all($activities_result, MYSQLI_ASSOC);
+    }
+}
 
 // Recent service requests
 $recent_requests_sql = "SELECT 
@@ -115,10 +101,11 @@ $recent_requests_sql = "SELECT
                         JOIN services s ON sr.service_id = s.service_id
                         ORDER BY sr.request_date DESC
                         LIMIT 5";
-$recent_requests_result = mysqli_query($conn, $recent_requests_sql);
-$recent_requests = mysqli_fetch_all($recent_requests_result, MYSQLI_ASSOC);
+$recent_requests_result = safeQuery($conn, $recent_requests_sql);
+$recent_requests = $recent_requests_result ? mysqli_fetch_all($recent_requests_result, MYSQLI_ASSOC) : [];
 
 // Monthly statistics for chart
+$monthly_stats = [];
 $monthly_stats_sql = "SELECT 
                         DATE_FORMAT(request_date, '%Y-%m') as month,
                         COUNT(*) as total_requests,
@@ -128,8 +115,24 @@ $monthly_stats_sql = "SELECT
                       WHERE request_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
                       GROUP BY DATE_FORMAT(request_date, '%Y-%m')
                       ORDER BY month DESC";
-$monthly_stats_result = mysqli_query($conn, $monthly_stats_sql);
-$monthly_stats = mysqli_fetch_all($monthly_stats_result, MYSQLI_ASSOC);
+$monthly_stats_result = safeQuery($conn, $monthly_stats_sql);
+if ($monthly_stats_result) {
+    $monthly_stats = mysqli_fetch_all($monthly_stats_result, MYSQLI_ASSOC);
+}
+
+// If no monthly stats, create sample data for display
+if (empty($monthly_stats)) {
+    $monthly_stats = [];
+    for ($i = 5; $i >= 0; $i--) {
+        $date = date('Y-m', strtotime("-$i months"));
+        $monthly_stats[] = [
+            'month' => $date,
+            'total_requests' => 0,
+            'completed' => 0,
+            'revenue' => 0
+        ];
+    }
+}
 ?>
 
 <!-- Admin Header -->
@@ -269,15 +272,43 @@ $monthly_stats = mysqli_fetch_all($monthly_stats_result, MYSQLI_ASSOC);
                         <a href="users.php" class="btn btn-success">
                             <i class="fas fa-users me-2"></i>Manage Users
                         </a>
-                        <a href="settings.php" class="btn btn-secondary">
-                            <i class="fas fa-cog me-2"></i>System Settings
-                        </a>
+
+                        <li class="nav-item">
+                            <a class="nav-link <?php echo $page == 'contact-messages' ? 'active' : ''; ?>" href="?page=contact-messages">
+                                <i class="fas fa-envelope"></i> 
+                                Contact Messages
+                                <?php
+                                // Get unread count
+                                $unread_sql = "SELECT COUNT(*) as unread FROM contact_messages WHERE is_read = 0";
+                                $unread_result = mysqli_query($conn, $unread_sql);
+                                if ($unread_result) {
+                                    $unread_data = mysqli_fetch_assoc($unread_result);
+                                    if ($unread_data['unread'] > 0) {
+                                        echo '<span class="badge bg-danger ms-2">' . $unread_data['unread'] . '</span>';
+                                    }
+                                }
+                                ?>
+                            </a>
+                        </li>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
+
+    <!-- Dynamic Content -->
+                            <?php
+                            // Include the appropriate page based on the parameter
+                            $page_file = __DIR__ . '/' . $page . '.php';
+
+                            if (file_exists($page_file)) {
+                                include $page_file;
+                            } else {
+                                echo '<div class="alert alert-danger">Page not found: ' . htmlspecialchars($page) . '</div>';
+                                echo '<p>The requested file: ' . htmlspecialchars($page_file) . '</p>';
+                            }
+                            ?>
+                                
     <!-- Recent Activity and Requests Row -->
     <div class="row">
         <!-- Recent Service Requests -->
@@ -355,7 +386,13 @@ $monthly_stats = mysqli_fetch_all($monthly_stats_result, MYSQLI_ASSOC);
                 <div class="card-body p-0">
                     <div class="list-group list-group-flush">
                         <?php if (empty($recent_activities)): ?>
-                            <div class="list-group-item text-center py-4">No recent activities</div>
+                            <div class="list-group-item text-center py-4">
+                                <i class="fas fa-info-circle me-2"></i>
+                                No recent activities found
+                                <?php if (!mysqli_num_rows(mysqli_query($conn, "SHOW TABLES LIKE 'user_activity_log'"))) { ?>
+                                    <br><small class="text-muted">The activity log table is not yet created. It will be created automatically when users perform actions.</small>
+                                <?php } ?>
+                            </div>
                         <?php else: ?>
                             <?php foreach ($recent_activities as $activity): ?>
                             <div class="list-group-item">
@@ -373,7 +410,7 @@ $monthly_stats = mysqli_fetch_all($monthly_stats_result, MYSQLI_ASSOC);
                                             <br><small class="text-muted ms-4"><?php echo $activity['details']; ?></small>
                                         <?php endif; ?>
                                     </div>
-                                    <small class="text-muted"><?php echo timeAgo($activity['created_at']); ?></small>
+                                    <small class="text-muted"><?php echo function_exists('timeAgo') ? timeAgo($activity['created_at']) : date('d M Y H:i', strtotime($activity['created_at'])); ?></small>
                                 </div>
                             </div>
                             <?php endforeach; ?>
@@ -457,32 +494,6 @@ new Chart(ctx, {
         }
     }
 });
-
-// Helper function for time ago
-function timeAgo(timestamp) {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-    
-    const intervals = {
-        year: 31536000,
-        month: 2592000,
-        week: 604800,
-        day: 86400,
-        hour: 3600,
-        minute: 60,
-        second: 1
-    };
-    
-    for (const [unit, secondsInUnit] of Object.entries(intervals)) {
-        const interval = Math.floor(seconds / secondsInUnit);
-        if (interval >= 1) {
-            return interval + ' ' + unit + (interval === 1 ? '' : 's') + ' ago';
-        }
-    }
-    
-    return 'just now';
-}
 </script>
 
 <?php include '../includes/footer.php'; ?>

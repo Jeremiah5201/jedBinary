@@ -3,7 +3,14 @@
 require_once 'includes/config.php';
 
 if (isLoggedIn()) {
-    redirect('/dashboard.php');
+    // After successful login, check user type
+if ($_SESSION['user_type'] == 'admin') {
+    header('Location: admin/index.php');
+    exit();
+} else {
+    header('Location: dashboard.php');
+    exit();
+}
 }
 
 $page_title = 'Login';

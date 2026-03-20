@@ -155,6 +155,26 @@ include 'includes/header.php';
         </div>
     </div>
 </section>
+<?php
+// In contact.php, when processing the contact form
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name = mysqli_real_escape_string($conn, $_POST['name']);
+    $email = mysqli_real_escape_string($conn, $_POST['email']);
+    $phone = mysqli_real_escape_string($conn, $_POST['phone']);
+    $service_interest = mysqli_real_escape_string($conn, $_POST['service_interest']);
+    $subject = mysqli_real_escape_string($conn, $_POST['subject']);
+    $message = mysqli_real_escape_string($conn, $_POST['message']);
+    
+    $sql = "INSERT INTO contact_messages (name, email, phone, service_interest, subject, message) 
+            VALUES ('$name', '$email', '$phone', '$service_interest', '$subject', '$message')";
+    
+    if (mysqli_query($conn, $sql)) {
+        $_SESSION['contact_success'] = "Thank you for contacting us. We will get back to you soon!";
+    } else {
+        $_SESSION['contact_error'] = "Failed to send message. Please try again.";
+    }
+}
+?>
 
 <!-- Map Section -->
 <section class="map-section">

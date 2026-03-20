@@ -1,5 +1,4 @@
-<!-- auth.php placeholder -->
- <?php
+<?php
 /**
  * JED BINARY TECH SOLUTIONS
  * Authentication and Authorization Management
@@ -20,14 +19,27 @@ class Auth {
     private $user_id;
     private $user_data;
     private $logged_in = false;
+    private $activity_log_enabled = true;
     
     /**
      * Constructor - Initialize database connection
      */
     public function __construct($db_connection) {
         $this->conn = $db_connection;
+        $this->checkActivityLogTable();
         $this->checkSession();
         $this->checkRememberMe();
+    }
+    
+    /**
+     * Check if activity log table exists
+     */
+    private function checkActivityLogTable() {
+        $check_sql = "SHOW TABLES LIKE 'user_activity_log'";
+        $check_result = mysqli_query($this->conn, $check_sql);
+        if (!$check_result || mysqli_num_rows($check_result) == 0) {
+            $this->activity_log_enabled = false;
+        }
     }
     
     /**
@@ -203,8 +215,8 @@ class Auth {
         
         // Prepare fields for insertion
         $fields = [
-            'full_name' => mysqli_real_escape_string($this->conn, $user_data['full_name']),
-            'email' => $email,
+            'full_name' => "'" . mysqli_real_escape_string($this->conn, $user_data['full_name']) . "'",
+            'email' => "'$email'",
             'password_hash' => "'$password_hash'",
             'phone' => isset($user_data['phone']) ? "'" . mysqli_real_escape_string($this->conn, $user_data['phone']) . "'" : 'NULL',
             'address' => isset($user_data['address']) ? "'" . mysqli_real_escape_string($this->conn, $user_data['address']) . "'" : 'NULL',
@@ -302,6 +314,13 @@ class Auth {
      * @param string $email Email used in attempt
      */
     private function logFailedAttempt($email) {
+        // Check if login_attempts table exists
+        $check_sql = "SHOW TABLES LIKE 'login_attempts'";
+        $check_result = mysqli_query($this->conn, $check_sql);
+        if (mysqli_num_rows($check_result) == 0) {
+            return;
+        }
+        
         $ip = $_SERVER['REMOTE_ADDR'];
         $user_agent = mysqli_real_escape_string($this->conn, $_SERVER['HTTP_USER_AGENT']);
         $email = mysqli_real_escape_string($this->conn, $email);
@@ -325,6 +344,9 @@ class Auth {
         $sql = "SELECT COUNT(*) as attempts FROM login_attempts 
                 WHERE email = '$email' AND attempt_time > '$time_limit'";
         $result = mysqli_query($this->conn, $sql);
+        if (!$result) {
+            return;
+        }
         $row = mysqli_fetch_assoc($result);
         
         if ($row['attempts'] >= 5) {
@@ -371,6 +393,10 @@ class Auth {
      * @param string $details Additional details
      */
     public function logActivity($user_id, $action, $details = '') {
+        if (!$this->activity_log_enabled) {
+            return;
+        }
+        
         $ip = $_SERVER['REMOTE_ADDR'];
         $user_agent = mysqli_real_escape_string($this->conn, $_SERVER['HTTP_USER_AGENT']);
         $action = mysqli_real_escape_string($this->conn, $action);
@@ -455,7 +481,7 @@ class Auth {
         }
         
         if ($this->isAdmin()) {
-            return SITE_URL . '/admin/dashboard.php';
+            return SITE_URL . '/admin/index.php';
         }
         
         return SITE_URL . '/dashboard.php';
@@ -757,14 +783,19 @@ class Auth {
     }
     
     /**
-     * Require admin privileges
+     * Require admin privileges - redirects non-admins to home page
      */
     public function requireAdmin() {
-        $this->requireAuth();
+        if (!$this->isLoggedIn()) {
+            $_SESSION['requested_url'] = $_SERVER['REQUEST_URI'];
+            $_SESSION['login_error'] = 'Please login to access the admin panel.';
+            header('Location: ' . SITE_URL . '/login.php');
+            exit();
+        }
         
         if (!$this->isAdmin()) {
-            header('HTTP/1.0 403 Forbidden');
-            include  SITE_ROOT . '/403.php';
+            // Not an admin - redirect to home page
+            header('Location: ' . SITE_URL . '/index.php');
             exit();
         }
     }
@@ -796,6 +827,10 @@ class Auth {
      * @return array Activity log
      */
     public function getUserActivity($user_id, $limit = 50) {
+        if (!$this->activity_log_enabled) {
+            return [];
+        }
+        
         $user_id = intval($user_id);
         $limit = intval($limit);
         
@@ -859,7 +894,7 @@ function requireAuth() {
 }
 
 /**
- * Require admin privileges
+ * Require admin privileges - redirects non-admins to home page
  */
 function requireAdmin() {
     global $auth;

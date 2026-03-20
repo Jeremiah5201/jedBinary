@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/config.php';
 $page_title = 'Access Denied - 403 Forbidden';
+include 'includes/header.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -30,19 +31,6 @@ $page_title = 'Access Denied - 403 Forbidden';
 </head>
 <body>
     <!-- Simple Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <div class="container">
-            <a class="navbar-brand" href="<?php echo SITE_URL; ?>/index.php">
-                <img src="<?php echo SITE_URL; ?>/assets/images/logo.png" alt="JED BINARY TECH" height="40">
-                <span class="brand-text">JED BINARY TECH</span>
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="<?php echo SITE_URL; ?>/index.php">Home</a>
-                <a class="nav-link" href="<?php echo SITE_URL; ?>/services.php">Services</a>
-                <a class="nav-link" href="<?php echo SITE_URL; ?>/contact.php">Contact</a>
-            </div>
-        </div>
-    </nav>
 
     <div class="container">
         <div class="row">
@@ -74,11 +62,7 @@ $page_title = 'Access Denied - 403 Forbidden';
     </div>
 
     <!-- Simple Footer -->
-    <footer class="footer bg-dark text-light py-4 mt-5">
-        <div class="container text-center">
-            <p class="mb-0">&copy; <?php echo date('Y'); ?> JED BINARY TECH SOLUTIONS AND CONSULTANCY. All rights reserved.</p>
-        </div>
-    </footer>
+   <?php include 'includes/footer.php'; ?>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

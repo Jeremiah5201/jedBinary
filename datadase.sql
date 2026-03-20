@@ -20,6 +20,47 @@ CREATE TABLE users (
     is_active BOOLEAN DEFAULT TRUE
 );
 
+-- Add profile image column if not exists
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS profile_image VARCHAR(255) NULL,
+ADD COLUMN IF NOT EXISTS city VARCHAR(100) NULL,
+ADD COLUMN IF NOT EXISTS state VARCHAR(100) NULL,
+ADD COLUMN IF NOT EXISTS pincode VARCHAR(10) NULL,
+ADD COLUMN IF NOT EXISTS email_notifications TINYINT(1) DEFAULT 1,
+ADD COLUMN IF NOT EXISTS sms_notifications TINYINT(1) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS two_factor_enabled TINYINT(1) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS last_activity DATETIME NULL;
+
+-- Create user_activity_log table if not exists
+CREATE TABLE IF NOT EXISTS user_activity_log (
+    log_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    details TEXT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_action (action),
+    INDEX idx_created_at (created_at),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Add reset_token and reset_expiry columns to users table
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255) NULL,
+ADD COLUMN IF NOT EXISTS reset_expiry DATETIME NULL,
+ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(255) NULL,
+ADD COLUMN IF NOT EXISTS email_verified TINYINT(1) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS remember_token VARCHAR(255) NULL,
+ADD COLUMN IF NOT EXISTS profile_image VARCHAR(255) NULL,
+ADD INDEX idx_reset_token (reset_token),
+ADD INDEX idx_email_verification (email_verification_token);
+
+-- Add created_at column if not exists
+ALTER TABLE services 
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
 -- Services table
 CREATE TABLE services (
     service_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -74,8 +115,8 @@ CREATE TABLE passport_assistance (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
--- Contact messages table
-CREATE TABLE contact_messages (
+-- Create contact_messages table
+CREATE TABLE IF NOT EXISTS contact_messages (
     message_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL,
@@ -85,8 +126,15 @@ CREATE TABLE contact_messages (
     message TEXT NOT NULL,
     replied BOOLEAN DEFAULT FALSE,
     is_read BOOLEAN DEFAULT FALSE,
-    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+    reply_message TEXT,
+    replied_by INT,
+    replied_at DATETIME,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email (email),
+    INDEX idx_status (is_read),
+    INDEX idx_replied (replied),
+    FOREIGN KEY (replied_by) REFERENCES users(user_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Portfolio table
 CREATE TABLE portfolio (
@@ -131,6 +179,17 @@ CREATE TABLE blog_posts (
     published_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create login_attempts table (if referenced in auth.php)
+CREATE TABLE IF NOT EXISTS login_attempts (
+    attempt_id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(100),
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    attempt_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email (email),
+    INDEX idx_attempt_time (attempt_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Insert sample data
 INSERT INTO services (service_name, category, short_description, full_description, price_range, icon_class, features, is_featured) VALUES

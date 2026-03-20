@@ -1,0 +1,19 @@
+# Enable rewrite engine
+RewriteEngine On
+RewriteBase /jedbinary/
+
+# Custom error pages
+ErrorDocument 404 /jedbinary/404.php
+ErrorDocument 403 /jedbinary/403.php
+ErrorDocument 500 /jedbinary/500.php
+
+# Remove .php extension (optional)
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^(.*)$ $1.php [L]
+
+# Prevent directory listing
+Options -Indexes
+
+# Set default charset
+AddDefaultCharset UTF-8
